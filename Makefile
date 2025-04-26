@@ -4,7 +4,7 @@ REGISTRIES?=	cr.skunkwerks.at \
 		skunkwerks
 
 # flavours
-FLAVOURS=	static dynamic minimal
+FLAVOURS=	static dynamic runtime
 # tags
 TAGS=		14.2 14.2p0 \
 		14.snap 14.snap20250415190046 \
