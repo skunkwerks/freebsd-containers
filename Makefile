@@ -7,8 +7,9 @@ REGISTRIES?=	cr.skunkwerks.at \
 FLAVOURS?=	static dynamic runtime
 # tags
 TAGS?=		14.2 14.2p0 \
+		14.3-prerelease \
 		14.snap 14.snap20250415190046 \
-		15.snap 15.snap20250426160738
+		15.snap 15.snap20250424035343
 
 .PHONY: export push
 
