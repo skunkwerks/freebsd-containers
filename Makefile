@@ -1,7 +1,6 @@
 # destination registries
-REGISTRIES?=	cr.skunkwerks.at \
-		ghcr.io/skunkwerks \
-		skunkwerks
+REGISTRIES?=	freebsd \
+		ghcr.io/freebsd
 
 # flavours
 FLAVOURS?=	static dynamic runtime
