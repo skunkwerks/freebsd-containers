@@ -1,0 +1,164 @@
+#!/usr/libexec/flua
+
+-- check if we have enough arguments
+if #arg < 3 then
+	print("usage: podmanic <aarch64.txz> <amd64.txz> <manifest> [tags...]")
+	os.exit(1)
+end
+
+function execute_command(command)
+	print("executing: " .. command)
+	local handle = io.popen(command)
+	local result = handle:read("*a")
+	local success, _, code = handle:close()
+	return result:gsub("%s+$", ""), success, code
+end
+
+function import_image(txz_path)
+	print("importing " .. txz_path)
+	local output, success = execute_command("podman load -i=" .. txz_path)
+
+	if not success then
+		print("FATAL: failed to import " .. txz_path)
+		print("command output: " .. output)
+		print("make sure the file exists and is a valid container image")
+		os.exit(1)
+	end
+
+	-- extract the image id from the output
+	-- output format is typically: "Loaded image: localhost/freebsd-static:14.2-stable-amd64"
+	local image_id = output:match("Loaded image: ([^\n]+)")
+
+	if not image_id then
+		-- if still not found, try to list images and find the most recently loaded one
+		print("FATAL: could not determine image id from output")
+		print("command output: " .. output)
+		print("failed to extract image id using pattern matching and fallback method")
+		os.exit(1)
+	end
+
+	print("found image: " .. image_id)
+	return image_id
+end
+
+function create_manifest(manifest_name, image_ids)
+	-- First, try to remove any existing manifest with the same name
+	local rm_cmd = "podman manifest rm " .. manifest_name .. " 2>/dev/null || true"
+	execute_command(rm_cmd)
+
+	-- Create empty manifest
+	local create_cmd = "podman manifest create " .. manifest_name
+	local output, success = execute_command(create_cmd)
+
+	if not success then
+		print("FATAL: Failed to create manifest: " .. output)
+		os.exit(1)
+	end
+
+	-- add each image to the manifest
+	for i, image_id in ipairs(image_ids) do
+		local arch = i == 1 and "arm64" or "amd64"
+		local add_cmd = "podman manifest add --arch " .. arch .. " " .. manifest_name .. " " .. image_id
+		local add_output, add_success = execute_command(add_cmd)
+
+		if not add_success then
+			print("FATAL: failed to add " .. image_id .. " to manifest: " .. add_output)
+			os.exit(1)
+		end
+	end
+
+	print("successfully created manifest: " .. manifest_name)
+	return manifest_name
+end
+
+function apply_tags(manifest_name, tags)
+	for _, tag in ipairs(tags) do
+		local tag_cmd = "podman tag " .. manifest_name .. " " .. tag
+		local output, success = execute_command(tag_cmd)
+
+		if not success then
+			print("ERROR: failed to apply tag " .. tag .. ": " .. output)
+		else
+			print("applied tag: " .. tag)
+
+			-- also push the additional tags if we're pushing to a registry
+			-- if manifest_name:match("^[^/]+%.") or manifest_name:match("^localhost/") then
+			-- 	local push_tag_cmd = "podman manifest push --all " .. tag .. " " .. tag
+			-- 	local push_output, push_success = execute_command(push_tag_cmd)
+
+			-- 	if push_success then
+			-- 		print("successfully pushed tag: " .. tag)
+			-- 	else
+			-- 		print("ERROR: failed to push tag " .. tag .. ": " .. push_output)
+			-- 	end
+			-- end
+		end
+	end
+end
+
+function export_manifest(manifest_name)
+	local file = manifest_name .. ".oci"
+	-- remove all text up to / from filename, and replace all : with -
+	file = file:gsub("^.+/", "")
+	file = file:gsub(":", "-")
+	local push_cmd = "podman manifest push --all " .. manifest_name .. " oci-archive:" .. file
+	local output, success = execute_command(push_cmd)
+
+	if not success then
+		print("FATAL: failed to push manifest " .. manifest_name .. ": " .. output)
+		print("- make sure you're logged in via podman login")
+		return false
+	end
+
+	print("successfully pushed manifest: " .. manifest_name .. " to " .. file)
+	return true
+end
+
+-- get arguments
+local manifest_name = arg[3]
+local txz_arm64 = arg[1]  -- arm64 image
+local txz_amd64 = arg[2]  -- amd64 image
+local tags = {}
+
+-- collect additional tags
+for i = 4, #arg do
+	table.insert(tags, arg[i])
+end
+
+print("podmanic is processing:")
+print("- manifest: " .. manifest_name)
+print("- arm64 image: " .. txz_arm64)
+print("- amd64 image: " .. txz_amd64)
+if #tags > 0 then
+	print("- additional tags: " .. table.concat(tags, ", "))
+end
+print("")
+
+-- import images
+local image_arm64 = import_image(txz_arm64)
+local image_amd64 = import_image(txz_amd64)
+
+if not image_arm64 or not image_amd64 then
+	print("FATAL: failed to import one or more images")
+	os.exit(1)
+end
+
+-- create manifest
+local manifest = create_manifest(manifest_name, {image_arm64, image_amd64})
+if not manifest then
+	print("FATAL: failed to create or populate manifest")
+	os.exit(1)
+end
+
+-- apply additional tags
+if #tags > 0 then
+	apply_tags(manifest_name, tags)
+end
+
+-- export manifest
+if not export_manifest(manifest_name) then
+	print("FATAL: failed to publish manifest")
+	os.exit(1)
+end
+
+print("OK: great success")
