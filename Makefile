@@ -11,6 +11,7 @@ BASE?=	https://download.freebsd.org/releases/OCI-IMAGES
 # SNAPSHOTS
 # https://download.freebsd.org/snapshots/OCI-IMAGES/15.0-CURRENT/aarch64/Latest/
 # https://download.freebsd.org/snapshots/OCI-IMAGES/15.0-CURRENT/amd64/Latest/
+BASE?=	https://download.freebsd.org/releases/OCI-IMAGES
 BASE?=	https://download.freebsd.org/snapshots/OCI-IMAGES
 
 # flavours
@@ -20,6 +21,7 @@ FLAVOURS?=	static dynamic runtime
 # 		14.3-beta2 \
 # 		14.snap 14.snap20250415190046 \
 # 		15.snap 15.snap20250424035343
+TAGS?=	14.3-beta4
 
 .PHONY: export import push
 
